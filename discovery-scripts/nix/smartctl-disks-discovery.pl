@@ -76,6 +76,28 @@ else {
 
     }
 
+    my $controller = "none";
+    foreach my $line (`ls -1 /dev/twa*`) {
+	chomp $line;
+	if (system("smartctl -d 3ware,0 $line 1>/dev/null 2>/dev/null") == 0) {
+	    $controller = $line;
+	    last;
+	}
+    }
+
+    for my $line (`ls -l /dev/disk/by-path/*scsi*:0`) {
+	$line =~ /-\d+:\d+:(\d+):\d+/;
+	my $port = "$1";
+	$line =~ /\/(\w+)$/;
+	my $device = "$1";
+	push @input_disks,
+	{
+	    disk_name => $device,
+	    disk_cmd => "-d 3ware,$port $controller",
+	    disk_args => ""
+	};
+    }
+
     if (-x $sg_scan_cmd){
         foreach my $line (`$sg_scan_cmd -i`) {
             ## sg_scan -i
@@ -146,14 +168,15 @@ sub get_smart_disks {
     $disk->{smart_enabled} = 0;
 
     chomp( $disk->{disk_name} );
-    chomp( $disk->{disk_args} );
-    
-    $disk->{disk_cmd} = $disk->{disk_name};
-    if (length($disk->{disk_args}) > 0){
-        $disk->{disk_cmd}.=q{ }.$disk->{disk_args};
-        if ( $disk->{subdisk} == 1 and $disk->{disk_args} =~ /-d\s+[^,\s]+,(\S+)/) {
-            $disk->{disk_name} .= " ($1)";
-        }
+    if (not defined $disk->{disk_cmd}) {
+	chomp( $disk->{disk_args} );
+	$disk->{disk_cmd} = $disk->{disk_name};
+	if (length($disk->{disk_args}) > 0){
+	    $disk->{disk_cmd}.=q{ }.$disk->{disk_args};
+	    if ( $disk->{subdisk} == 1 and $disk->{disk_args} =~ /-d\s+[^,\s]+,(\S+)/) {
+		$disk->{disk_name} .= " ($1)";
+	    }
+	}
     }
 
     #my $testline = "open failed: Two devices connected, try '-d usbjmicron,[01]'";
