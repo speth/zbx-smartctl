@@ -63,7 +63,7 @@ else {
         #"/dev/bus/0 -d megaraid,01" for megaraid
         #"# /dev/sdc -d usbjmicron # /dev/sdc [USB JMicron], ATA device open "
 
-        my ($disk_name) = $line =~ /(\/(.+?))(?:$|\s)/;
+        my ($disk_name) = $line =~ /\/dev\/((.+?))(?:$|\s)/;
         my ($disk_args) = $line =~ /(-d [A-Za-z0-9,\+]+)/;
 
         if ( $disk_name and $disk_args ) {
@@ -108,7 +108,7 @@ else {
             #    Dell      Virtual Disk      1028 [rmb=0 cmdq=1 pqual=0 pdev=0x0] 
             #/dev/sg2: scsi0 channel=0 id=1 lun=0
             #    ATA       TOSHIBA MG03ACA1  FL1D [rmb=0 cmdq=1 pqual=0 pdev=0x0]
-            if ($line =~ /(\/(.+?)):/){
+            if ($line =~ /\/dev\/((.+?)):/){
                     my ($disk_name) = $1;
                     my ($disk_args) = "";
 
@@ -129,7 +129,7 @@ else {
             # ---------------- -------------------- ---------------------------------------- --------- -------------------------- ---------------- --------
             # /dev/nvme0n1     S3W8NX0M10ZZZZ       SAMSUNG MZVLB512HAJQ-00000               1          18.87  GB / 512.11  GB    512   B +  0 B   EXA7301Q
             # /dev/nvme1n1     S3W8NX0M15ZZZZ       SAMSUNG MZVLB512HAJQ-00000               1         511.77  GB / 512.11  GB    512   B +  0 B   EXA7301Q
-            if ($line =~ /(\/(?:.+?))\s/){
+            if ($line =~ /(\/dev\/(?:.+?))\s/){
                     my ($disk_name) = $1;
                     my ($disk_args) = "";
 
@@ -170,7 +170,7 @@ sub get_smart_disks {
     chomp( $disk->{disk_name} );
     if (not defined $disk->{disk_cmd}) {
 	chomp( $disk->{disk_args} );
-	$disk->{disk_cmd} = $disk->{disk_name};
+	$disk->{disk_cmd} = "/dev/" . $disk->{disk_name};
 	if (length($disk->{disk_args}) > 0){
 	    $disk->{disk_cmd}.=q{ }.$disk->{disk_args};
 	    if ( $disk->{subdisk} == 1 and $disk->{disk_args} =~ /-d\s+[^,\s]+,(\S+)/) {
