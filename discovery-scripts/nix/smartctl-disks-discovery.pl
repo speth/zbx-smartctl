@@ -77,7 +77,7 @@ else {
     }
 
     my $controller = "none";
-    foreach my $line (`ls -1 /dev/twa*`) {
+    foreach my $line (`ls -1 /dev/twa* 2>/dev/null`) {
 	chomp $line;
 	if (system("smartctl -d 3ware,0 $line 1>/dev/null 2>/dev/null") == 0) {
 	    $controller = $line;
@@ -85,17 +85,19 @@ else {
 	}
     }
 
-    for my $line (`ls -l /dev/disk/by-path/*scsi*:0`) {
-	$line =~ /-\d+:\d+:(\d+):\d+/;
-	my $port = "$1";
-	$line =~ /\/(\w+)$/;
-	my $device = "$1";
-	push @input_disks,
-	{
-	    disk_name => $device,
-	    disk_cmd => "-d 3ware,$port $controller",
-	    disk_args => ""
-	};
+    if ($controller ne "none") {
+	for my $line (`ls -l /dev/disk/by-path/*scsi*:0`) {
+	    $line =~ /-\d+:\d+:(\d+):\d+/;
+	    my $port = "$1";
+	    $line =~ /\/(\w+)$/;
+	    my $device = "$1";
+	    push @input_disks,
+	    {
+		disk_name => $device,
+		disk_cmd => "-d 3ware,$port $controller",
+		disk_args => ""
+	    };
+	}
     }
 
     if (-x $sg_scan_cmd){
