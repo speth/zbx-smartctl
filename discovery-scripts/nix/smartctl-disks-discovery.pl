@@ -13,6 +13,7 @@ my $nvme_cmd = "/usr/sbin/nvme";
 my @input_disks;
 my @global_serials;
 my @smart_disks;
+my %finished_disks = (); # disks that already have a good way of getting their SMART info
 
 # by providing additional positional arguments you can add disks that are hardly discovered otherwise.
 # for example to force discovery of the following disks provide '/dev/sda_-d_sat+megaraid,00 /dev/sda_-d_sat+megaraid,01' as arguments
@@ -50,6 +51,30 @@ if ( $^O eq 'darwin' ) {    # if MAC OSX (limited support, consider to use smart
     }
 }
 else {
+    my $controller = "none";
+    foreach my $line (`ls -1 /dev/tw?* 2>/dev/null`) {
+	chomp $line;
+	if (system("smartctl -d 3ware,0 $line 1>/dev/null 2>/dev/null") == 0) {
+	    $controller = $line;
+	    last;
+	}
+    }
+
+    if ($controller ne "none") {
+	for my $line (`ls -l /dev/disk/by-path/*scsi*:0`) {
+	    $line =~ /-\d+:\d+:(\d+):\d+/;
+	    my $port = "$1";
+	    $line =~ /\/(\w+)$/;
+	    my $device = "$1";
+	    push @input_disks,
+	    {
+		disk_name => $device,
+		disk_cmd => "-d 3ware,$port $controller",
+		disk_args => ""
+	    };
+	}
+    }
+
     foreach my $line (@{[
         `$smartctl_cmd --scan-open`,
         `$smartctl_cmd --scan-open -dnvme`
@@ -76,31 +101,9 @@ else {
 
     }
 
-    my $controller = "none";
-    foreach my $line (`ls -1 /dev/twa* 2>/dev/null`) {
-	chomp $line;
-	if (system("smartctl -d 3ware,0 $line 1>/dev/null 2>/dev/null") == 0) {
-	    $controller = $line;
-	    last;
-	}
-    }
-
-    if ($controller ne "none") {
-	for my $line (`ls -l /dev/disk/by-path/*scsi*:0`) {
-	    $line =~ /-\d+:\d+:(\d+):\d+/;
-	    my $port = "$1";
-	    $line =~ /\/(\w+)$/;
-	    my $device = "$1";
-	    push @input_disks,
-	    {
-		disk_name => $device,
-		disk_cmd => "-d 3ware,$port $controller",
-		disk_args => ""
-	    };
-	}
-    }
-
-    if (-x $sg_scan_cmd){
+    # If we've already found a 3ware controller, skip the generic SCSI
+    # device scan to avoid copious error messages that get dumped to syslog
+    if ($controller eq "none" && -x $sg_scan_cmd){
         foreach my $line (`$sg_scan_cmd -i`) {
             ## sg_scan -i
             # https://github.com/v-zhuravlev/zbx-smartctl/pull/29
@@ -179,6 +182,12 @@ sub get_smart_disks {
 		$disk->{disk_name} .= " ($1)";
 	    }
 	}
+    }
+
+    # Skip disks that we've already found a good way of accessing SMART info for.
+    # Important to avoid creating tons of error messages from 3ware RAID controllers
+    if (exists $finished_disks{$disk->{disk_name}}) {
+	return;
     }
 
     #my $testline = "open failed: Two devices connected, try '-d usbjmicron,[01]'";
@@ -339,6 +348,7 @@ sub get_smart_disks {
     
     # push to global serials list
     if ($disk->{smart_enabled} == 1){
+	$finished_disks{$disk->{disk_name}} = 1;
         #print "Serial number is ".$disk->{disk_sn}."\n";
         if ( grep /$disk->{disk_sn}/, @global_serials ) {
             # print "disk already exists skipping\n";
